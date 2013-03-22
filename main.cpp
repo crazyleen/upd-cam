@@ -45,6 +45,8 @@
 
 int main(int argc, char *argv[])
 {
+    Q_INIT_RESOURCE(ipcamera);
+
     QApplication app(argc, argv);
     ImageViewer imageViewer;
     udpServer server;

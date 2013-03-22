@@ -41,6 +41,8 @@
 #include <QtGui>
 #include <QFile>
 #include <QDebug>
+#include <QPainter>
+#include <QImage>
 #include "imageviewer.h"
 
 //! [0]
@@ -61,9 +63,9 @@ ImageViewer::ImageViewer()
 
     setWindowTitle(tr("image Viewer"));
 
-    resize(500, 400);
+    resize(640, 480);
 
-    openLogoFile("logo.jpg");
+    openLogoFile(":/images/logo.jpg");
 }
 //! [0]
 
@@ -71,9 +73,18 @@ void ImageViewer::updateImage(const QString &clientStr, const QByteArray &jpegBu
 {
     qDebug() << clientStr << " jpeg size = " << jpegBuffer.size()/1024 << "kb";
 
-        QPixmap pixmap;
-        pixmap.loadFromData(jpegBuffer, "jpg");
-        imageLabel->setPixmap(pixmap);
+//        QPixmap pixmap;
+//        if (!pixmap.loadFromData(jpegBuffer, "jpg"))
+//            return;
+
+        QImage image;
+        image.loadFromData(jpegBuffer, "jpg");
+
+        QPainter painter(&image);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setPen(QPen(Qt::red, 20, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.drawText(image.width() / 20, image.height() / 10, QDateTime::currentDateTime().toString("dd-MM-yyyy hh:mm:ss"));
+        imageLabel->setPixmap(QPixmap::fromImage(image));
 
         scaleFactor = 1.0;
 
