@@ -42,7 +42,7 @@
 #define IMAGEVIEWER_H
 
 #include <QMainWindow>
-#include <QPrinter>
+#include <QFileInfo>
 #include <QUdpSocket>
 
 QT_BEGIN_NAMESPACE
@@ -60,22 +60,26 @@ class ImageViewer : public QMainWindow
 
 public:
     ImageViewer();
+    ~ImageViewer();
     void openLogoFile(const QString &fileName);
 
 private slots:
     void open();
 
-    void print();
+    void capture();
+    void capureQuick();
     void zoomIn();
     void zoomOut();
     void normalSize();
     void fitToWindow();
     void about();
-
 public slots:
     void updateImage(const QString &clientStr, const QByteArray &jpegBuffer);
 
 private:
+    void deleteDirectory(QFileInfo fileList);
+    QString getCaptureDir();
+    void saveImage(QImage &image);
     void createActions();
     void createMenus();
     void updateActions();
@@ -86,23 +90,21 @@ private:
     QScrollArea *scrollArea;
     double scaleFactor;
 
-#ifndef QT_NO_PRINTER
-    QPrinter printer;
-#endif
-
     QAction *openAct;
-    QAction *printAct;
+    QAction *capureAct;
+    QAction *capureActQuick;
     QAction *exitAct;
     QAction *zoomInAct;
     QAction *zoomOutAct;
     QAction *normalSizeAct;
     QAction *fitToWindowAct;
     QAction *aboutAct;
-    QAction *aboutQtAct;
 
     QMenu *fileMenu;
     QMenu *viewMenu;
     QMenu *helpMenu;
+
+    int filename_cnt;
 };
 //! [0]
 

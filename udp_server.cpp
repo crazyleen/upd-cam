@@ -1,5 +1,5 @@
 #include "udp_server.h"
-
+ #include<QFile>
 
 void udpServer::run()
 {
@@ -60,6 +60,7 @@ udpServer::udpServer(int baseport, int count_of_sock, QObject *parent):
     {
         QUdpSocket *sock=new QUdpSocket();
         sock->bind(basePort+i, QUdpSocket::ReuseAddressHint);
+        //sock->bind(QHostAddress::Any, basePort+i);
         connect(sock, SIGNAL(readyRead()), this, SLOT(readPendingData()));
         socketArray.push_back(sock);
     }

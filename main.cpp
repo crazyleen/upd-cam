@@ -56,6 +56,5 @@ int main(int argc, char *argv[])
     imageViewer.show();
     server.start();
 
-    qDebug() << "app.exec...";
     return app.exec();
 }

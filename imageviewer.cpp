@@ -40,14 +40,15 @@
 
 #include <QtGui>
 #include <QFile>
+#include <QDir>
 #include <QDebug>
 #include <QPainter>
 #include <QImage>
 #include "imageviewer.h"
 
-//! [0]
 ImageViewer::ImageViewer()
 {
+    filename_cnt = 0;
     imageLabel = new QLabel;
     imageLabel->setBackgroundRole(QPalette::Base);
     imageLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
@@ -61,22 +62,46 @@ ImageViewer::ImageViewer()
     createActions();
     createMenus();
 
-    setWindowTitle(tr("image Viewer"));
+    setWindowTitle(tr("webcame"));
 
     resize(640, 480);
 
     openLogoFile(":/images/logo.jpg");
 }
-//! [0]
+
+ImageViewer::~ImageViewer()
+{
+    this->deleteDirectory(QFileInfo("tmp"));
+    this->close();
+}
+
+void ImageViewer::deleteDirectory(QFileInfo fileList)
+{
+
+    if(fileList.isDir()){
+        int childCount =0;
+        QString dir = fileList.filePath();
+        QDir thisDir(dir);
+        childCount = thisDir.entryInfoList().count();
+        QFileInfoList newFileList = thisDir.entryInfoList();
+        if(childCount>2){
+            for(int i=0;i<childCount;i++){
+                if(newFileList.at(i).fileName().operator ==(".")|newFileList.at(i).fileName().operator ==("..")){
+                    continue;
+                }
+                deleteDirectory(newFileList.at(i));
+            }
+        }
+        fileList.absoluteDir().rmpath(fileList.fileName());
+    }else if(fileList.isFile()){
+        fileList.absoluteDir().remove(fileList.fileName());
+    }
+
+}
 
 void ImageViewer::updateImage(const QString &clientStr, const QByteArray &jpegBuffer)
 {
-    qDebug() << clientStr << " jpeg size = " << jpegBuffer.size()/1024 << "kb";
-
-//        QPixmap pixmap;
-//        if (!pixmap.loadFromData(jpegBuffer, "jpg"))
-//            return;
-
+        qDebug() << clientStr << " jpeg size = " << jpegBuffer.size()/1024 << "kb";
         QImage image;
         image.loadFromData(jpegBuffer, "jpg");
 
@@ -85,10 +110,13 @@ void ImageViewer::updateImage(const QString &clientStr, const QByteArray &jpegBu
         painter.setPen(QPen(Qt::red, 20, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         painter.drawText(image.width() / 20, image.height() / 10, QDateTime::currentDateTime().toString("dd-MM-yyyy hh:mm:ss"));
         imageLabel->setPixmap(QPixmap::fromImage(image));
+        painter.end();
+
+        saveImage(image);
 
         scaleFactor = 1.0;
 
-        printAct->setEnabled(true);
+        capureAct->setEnabled(true);
         fitToWindowAct->setEnabled(true);
         updateActions();
 
@@ -97,66 +125,75 @@ void ImageViewer::updateImage(const QString &clientStr, const QByteArray &jpegBu
 
 }
 
+void ImageViewer::saveImage(QImage &image)
+{
+    //write to file
+    QString fmt("tmp/%1-%2.jpg");
+    QString filename = fmt.arg("test2").arg(this->filename_cnt++);
+    image.save(filename);
+}
+
 void ImageViewer::openLogoFile(const QString &fileName)
 {
     if (!fileName.isEmpty()) {
-        QFile file(fileName);
-        if (!file.open(QIODevice::ReadOnly))
-            return;
+        QImage image(fileName);
+        imageLabel->setPixmap(QPixmap::fromImage(image));
+        scaleFactor = 1.0;
 
-        QByteArray jpegBuffer = file.readAll();
-        file.close();
+        capureAct->setEnabled(true);
+        fitToWindowAct->setEnabled(true);
+        updateActions();
 
-        this->updateImage("logo", jpegBuffer);
+        if (!fitToWindowAct->isChecked())
+            imageLabel->adjustSize();
     }
 }
 
 //! [1]
 void ImageViewer::open()
-//! [1] //! [2]
 {
     QString fileName = QFileDialog::getOpenFileName(this,
                                     tr("Open File"), QDir::currentPath());
 
-
-    if (!fileName.isEmpty()) {
-        QFile file(fileName);
-        if (!file.open(QIODevice::ReadOnly))
-            return;
-
-        QByteArray jpegBuffer = file.readAll();
-        file.close();
-
-        this->updateImage("logo", jpegBuffer);
-    }
+    if(!fileName.isEmpty())
+        openLogoFile(fileName);
 }
-//! [4]
 
-//! [5]
-void ImageViewer::print()
-//! [5] //! [6]
+QString ImageViewer::getCaptureDir() {
+    QString folder("capture/");
+    QDir *captureDir = new QDir;
+    bool exist = captureDir->exists(folder);
+    if(!exist)
+    {
+        exist = captureDir->mkdir(folder);
+        if(!exist)
+            folder.clear();
+    }
+
+    return folder;
+}
+
+void ImageViewer::capture()
 {
     Q_ASSERT(imageLabel->pixmap());
-#ifndef QT_NO_PRINTER
-//! [6] //! [7]
-    QPrintDialog dialog(&printer, this);
-//! [7] //! [8]
-    if (dialog.exec()) {
-        QPainter painter(&printer);
-        QRect rect = painter.viewport();
-        QSize size = imageLabel->pixmap()->size();
-        size.scale(rect.size(), Qt::KeepAspectRatio);
-        painter.setViewport(rect.x(), rect.y(), size.width(), size.height());
-        painter.setWindow(imageLabel->pixmap()->rect());
-        painter.drawPixmap(0, 0, *imageLabel->pixmap());
-    }
-#endif
-}
-//! [8]
 
-//! [9]
+    QString fileName = getCaptureDir().append(QDateTime::currentDateTime().toString("yyyy_MM_dd_hh_mm_ss_zzz").append(".jpg"));
+    fileName = QFileDialog::getSaveFileName(this,
+                                                    tr("Save File"), fileName, tr("Images (*.png *.xpm *.jpg)"));
+    if(!fileName.isEmpty())
+        imageLabel->pixmap()->save(fileName);
+}
+
+/**
+ * capture quickly, save file to capture/dd_MM_yyyy_hh_mm_ss.jpg
+ */
+void ImageViewer::capureQuick()
+{
+    QString fileName = getCaptureDir().append(QDateTime::currentDateTime().toString("yyyy_MM_dd_hh_mm_ss_zzz").append(".jpg"));
+    imageLabel->pixmap()->save(fileName);
+}
+
 void ImageViewer::zoomIn()
-//! [9] //! [10]
 {
     scaleImage(1.25);
 }
@@ -166,18 +203,14 @@ void ImageViewer::zoomOut()
     scaleImage(0.8);
 }
 
-//! [10] //! [11]
 void ImageViewer::normalSize()
-//! [11] //! [12]
 {
     imageLabel->adjustSize();
     scaleFactor = 1.0;
 }
-//! [12]
 
-//! [13]
+
 void ImageViewer::fitToWindow()
-//! [13] //! [14]
 {
     bool fitToWindow = fitToWindowAct->isChecked();
     scrollArea->setWidgetResizable(fitToWindow);
@@ -186,41 +219,31 @@ void ImageViewer::fitToWindow()
     }
     updateActions();
 }
-//! [14]
 
 
-//! [15]
+
 void ImageViewer::about()
-//! [15] //! [16]
 {
-    QMessageBox::about(this, tr("About Image Viewer"),
-            tr("<p>The <b>Image Viewer</b> example shows how to combine QLabel "
-               "and QScrollArea to display an image. QLabel is typically used "
-               "for displaying a text, but it can also display an image. "
-               "QScrollArea provides a scrolling view around another widget. "
-               "If the child widget exceeds the size of the frame, QScrollArea "
-               "automatically provides scroll bars. </p><p>The example "
-               "demonstrates how QLabel's ability to scale its contents "
-               "(QLabel::scaledContents), and QScrollArea's ability to "
-               "automatically resize its contents "
-               "(QScrollArea::widgetResizable), can be used to implement "
-               "zooming and scaling features. </p><p>In addition the example "
-               "shows how to use QPainter to print an image.</p>"));
+    QMessageBox::about(this, tr("About webcam"),
+            tr("<p> <b>webcam</b> designed by QunChao Ma</p>"));
 }
-//! [16]
 
-//! [17]
+
 void ImageViewer::createActions()
-//! [17] //! [18]
 {
     openAct = new QAction(tr("&Open..."), this);
     openAct->setShortcut(tr("Ctrl+O"));
     connect(openAct, SIGNAL(triggered()), this, SLOT(open()));
 
-    printAct = new QAction(tr("&Print..."), this);
-    printAct->setShortcut(tr("Ctrl+P"));
-    printAct->setEnabled(false);
-    connect(printAct, SIGNAL(triggered()), this, SLOT(print()));
+    capureAct = new QAction(tr("&capture..."), this);
+    capureAct->setShortcut(tr("Ctrl+P"));
+    capureAct->setEnabled(false);
+    connect(capureAct, SIGNAL(triggered()), this, SLOT(capture()));
+
+    capureActQuick = new QAction(tr("&capture quick"), this);
+    capureActQuick->setShortcut(tr("Ctrl+Shift+P"));
+    capureActQuick->setEnabled(true);
+    connect(capureActQuick, SIGNAL(triggered()), this, SLOT(capureQuick()));
 
     exitAct = new QAction(tr("E&xit"), this);
     exitAct->setShortcut(tr("Ctrl+Q"));
@@ -242,26 +265,22 @@ void ImageViewer::createActions()
     connect(normalSizeAct, SIGNAL(triggered()), this, SLOT(normalSize()));
 
     fitToWindowAct = new QAction(tr("&Fit to Window"), this);
-    fitToWindowAct->setEnabled(false);
+    fitToWindowAct->setEnabled(true);
     fitToWindowAct->setCheckable(true);
     fitToWindowAct->setShortcut(tr("Ctrl+F"));
     connect(fitToWindowAct, SIGNAL(triggered()), this, SLOT(fitToWindow()));
 
     aboutAct = new QAction(tr("&About"), this);
     connect(aboutAct, SIGNAL(triggered()), this, SLOT(about()));
-
-    aboutQtAct = new QAction(tr("About &Qt"), this);
-    connect(aboutQtAct, SIGNAL(triggered()), qApp, SLOT(aboutQt()));
 }
-//! [18]
 
-//! [19]
+
 void ImageViewer::createMenus()
-//! [19] //! [20]
 {
     fileMenu = new QMenu(tr("&File"), this);
     fileMenu->addAction(openAct);
-    fileMenu->addAction(printAct);
+    fileMenu->addAction(capureAct);
+    fileMenu->addAction(capureActQuick);
     fileMenu->addSeparator();
     fileMenu->addAction(exitAct);
 
@@ -274,27 +293,23 @@ void ImageViewer::createMenus()
 
     helpMenu = new QMenu(tr("&Help"), this);
     helpMenu->addAction(aboutAct);
-    helpMenu->addAction(aboutQtAct);
 
     menuBar()->addMenu(fileMenu);
     menuBar()->addMenu(viewMenu);
     menuBar()->addMenu(helpMenu);
 }
-//! [20]
 
-//! [21]
+
 void ImageViewer::updateActions()
-//! [21] //! [22]
 {
     zoomInAct->setEnabled(!fitToWindowAct->isChecked());
     zoomOutAct->setEnabled(!fitToWindowAct->isChecked());
     normalSizeAct->setEnabled(!fitToWindowAct->isChecked());
 }
-//! [22]
 
-//! [23]
+
+
 void ImageViewer::scaleImage(double factor)
-//! [23] //! [24]
 {
     Q_ASSERT(imageLabel->pixmap());
     scaleFactor *= factor;
@@ -306,13 +321,12 @@ void ImageViewer::scaleImage(double factor)
     zoomInAct->setEnabled(scaleFactor < 3.0);
     zoomOutAct->setEnabled(scaleFactor > 0.333);
 }
-//! [24]
 
-//! [25]
+
+
 void ImageViewer::adjustScrollBar(QScrollBar *scrollBar, double factor)
-//! [25] //! [26]
 {
     scrollBar->setValue(int(factor * scrollBar->value()
                             + ((factor - 1) * scrollBar->pageStep()/2)));
 }
-//! [26]
+
