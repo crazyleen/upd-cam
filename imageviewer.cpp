@@ -44,11 +44,20 @@
 #include <QDebug>
 #include <QPainter>
 #include <QImage>
+#include <QProcess>
 #include "imageviewer.h"
 
-ImageViewer::ImageViewer()
+ImageViewer::ImageViewer():recordTime(0,0,0)
 {
     filename_cnt = 0;
+    needSaveImage = true;
+    recordTime.start();
+    captureDir = "capture";
+    currentTmpDir = "tmp/rev-" + QDateTime::currentDateTime().toString("hh_mm_ss");
+    tmpPicFmt = currentTmpDir + "/" + "pic-%1.jpg";
+    mkdir(captureDir);
+    mkdir(currentTmpDir);
+
     imageLabel = new QLabel;
     imageLabel->setBackgroundRole(QPalette::Base);
     imageLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
@@ -71,13 +80,11 @@ ImageViewer::ImageViewer()
 
 ImageViewer::~ImageViewer()
 {
-    this->deleteDirectory(QFileInfo("tmp"));
     this->close();
 }
 
 void ImageViewer::deleteDirectory(QFileInfo fileList)
 {
-
     if(fileList.isDir()){
         int childCount =0;
         QString dir = fileList.filePath();
@@ -101,18 +108,22 @@ void ImageViewer::deleteDirectory(QFileInfo fileList)
 
 void ImageViewer::updateImage(const QString &clientStr, const QByteArray &jpegBuffer)
 {
-        qDebug() << clientStr << " jpeg size = " << jpegBuffer.size()/1024 << "kb";
+        //qDebug() << clientStr << " jpeg size = " << jpegBuffer.size()/1024 << "kb";
         QImage image;
-        image.loadFromData(jpegBuffer, "jpg");
+        bool imageOK = image.loadFromData(jpegBuffer, "jpg");
+        if(!imageOK)
+            return;
 
         QPainter painter(&image);
         painter.setRenderHint(QPainter::Antialiasing, true);
-        painter.setPen(QPen(Qt::red, 20, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        painter.drawText(image.width() / 20, image.height() / 10, QDateTime::currentDateTime().toString("dd-MM-yyyy hh:mm:ss"));
+        painter.setPen(QPen(Qt::red, 30, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setFont(QFont("symbol",image.height() >> 4));
+        painter.drawText(image.width() >> 5, image.height() >> 3, QDateTime::currentDateTime().toString("dd-MM-yyyy hh:mm:ss"));
         imageLabel->setPixmap(QPixmap::fromImage(image));
         painter.end();
 
-        saveImage(image);
+        if(needSaveImage)
+            saveImage(image);
 
         scaleFactor = 1.0;
 
@@ -125,12 +136,47 @@ void ImageViewer::updateImage(const QString &clientStr, const QByteArray &jpegBu
 
 }
 
+void ImageViewer::recordFinish(void)
+{
+    qDebug() << "record finish";
+}
+
+void ImageViewer::recordImage(void)
+{
+    QString picFmt = currentTmpDir + "/" + "pic-%d.jpg";
+    currentTmpDir = "tmp/rev-" + QDateTime::currentDateTime().toString("hh_mm_ss");
+    tmpPicFmt = currentTmpDir + "/" + "pic-%1.jpg";
+    mkdir(currentTmpDir);
+    filename_cnt = 0;
+
+    emit needRecord(picFmt);
+}
+
 void ImageViewer::saveImage(QImage &image)
 {
     //write to file
-    QString fmt("tmp/%1-%2.jpg");
-    QString filename = fmt.arg("test2").arg(this->filename_cnt++);
-    image.save(filename);
+    QString filename = tmpPicFmt.arg(this->filename_cnt++);
+    image.save(filename, 0, 100);
+
+    //record video
+    if(recordTime.elapsed() > 10000){
+        recordTime.restart();
+        recordImage();
+    }
+}
+
+void ImageViewer::closeEvent(QCloseEvent *event)
+{
+    qDebug() << "mainwindows close";
+    if(needSaveImage) {
+        needSaveImage = false;
+        recordImage();
+        qDebug() << "viewer delete: " << currentTmpDir;
+        this->deleteDirectory(QFileInfo(currentTmpDir));  
+    }
+
+    emit windowClose();
+    event->accept();
 }
 
 void ImageViewer::openLogoFile(const QString &fileName)
@@ -159,13 +205,12 @@ void ImageViewer::open()
         openLogoFile(fileName);
 }
 
-QString ImageViewer::getCaptureDir() {
-    QString folder("capture/");
-    QDir *captureDir = new QDir;
-    bool exist = captureDir->exists(folder);
+QString ImageViewer::mkdir(QString folder) {
+    QDir *dir = new QDir;
+    bool exist = dir->exists(folder);
     if(!exist)
     {
-        exist = captureDir->mkdir(folder);
+        exist = dir->mkpath(folder);
         if(!exist)
             folder.clear();
     }
@@ -177,11 +222,11 @@ void ImageViewer::capture()
 {
     Q_ASSERT(imageLabel->pixmap());
 
-    QString fileName = getCaptureDir().append(QDateTime::currentDateTime().toString("yyyy_MM_dd_hh_mm_ss_zzz").append(".jpg"));
+    QString fileName = captureDir + "/" + (QDateTime::currentDateTime().toString("yyyy_MM_dd_hh_mm_ss_zzz").append(".jpg"));
     fileName = QFileDialog::getSaveFileName(this,
                                                     tr("Save File"), fileName, tr("Images (*.png *.xpm *.jpg)"));
     if(!fileName.isEmpty())
-        imageLabel->pixmap()->save(fileName);
+        imageLabel->pixmap()->save(fileName, 0, 100);
 }
 
 /**
@@ -189,8 +234,8 @@ void ImageViewer::capture()
  */
 void ImageViewer::capureQuick()
 {
-    QString fileName = getCaptureDir().append(QDateTime::currentDateTime().toString("yyyy_MM_dd_hh_mm_ss_zzz").append(".jpg"));
-    imageLabel->pixmap()->save(fileName);
+    QString fileName = captureDir + "/" + QDateTime::currentDateTime().toString("yyyy_MM_dd_hh_mm_ss_zzz").append(".jpg");
+    imageLabel->pixmap()->save(fileName, 0, 100);
 }
 
 void ImageViewer::zoomIn()
@@ -236,12 +281,12 @@ void ImageViewer::createActions()
     connect(openAct, SIGNAL(triggered()), this, SLOT(open()));
 
     capureAct = new QAction(tr("&capture..."), this);
-    capureAct->setShortcut(tr("Ctrl+P"));
+    capureAct->setShortcut(tr("Ctrl+Shift+P"));
     capureAct->setEnabled(false);
     connect(capureAct, SIGNAL(triggered()), this, SLOT(capture()));
 
     capureActQuick = new QAction(tr("&capture quick"), this);
-    capureActQuick->setShortcut(tr("Ctrl+Shift+P"));
+    capureActQuick->setShortcut(tr("Ctrl+P"));
     capureActQuick->setEnabled(true);
     connect(capureActQuick, SIGNAL(triggered()), this, SLOT(capureQuick()));
 

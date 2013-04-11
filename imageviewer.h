@@ -44,7 +44,7 @@
 #include <QMainWindow>
 #include <QFileInfo>
 #include <QUdpSocket>
-
+#include <QTime>
 QT_BEGIN_NAMESPACE
 class QAction;
 class QLabel;
@@ -62,7 +62,10 @@ public:
     ImageViewer();
     ~ImageViewer();
     void openLogoFile(const QString &fileName);
-
+    void closeEvent(QCloseEvent *event);
+signals:
+    void windowClose(void);
+    void needRecord(QString fmt);
 private slots:
     void open();
 
@@ -74,11 +77,19 @@ private slots:
     void fitToWindow();
     void about();
 public slots:
+    void recordFinish(void);
     void updateImage(const QString &clientStr, const QByteArray &jpegBuffer);
 
 private:
+    QTime   recordTime;
+    bool needSaveImage;
+    void recordImage(void);
     void deleteDirectory(QFileInfo fileList);
-    QString getCaptureDir();
+    QString captureDir;
+    QString currentTmpDir;
+    QString tmpPicFmt;
+    QString mkdir(QString folder);
+
     void saveImage(QImage &image);
     void createActions();
     void createMenus();

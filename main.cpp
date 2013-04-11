@@ -42,6 +42,7 @@
 #include <QObject>
 #include "imageviewer.h"
 #include "udp_server.h"
+#include "recorder.h"
 
 int main(int argc, char *argv[])
 {
@@ -49,12 +50,16 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     ImageViewer imageViewer;
-    udpServer server;
-
+    udpServer   server;
+    Recorder    recoder;
     QObject::connect(&server, SIGNAL(recvData(const QString &, const QByteArray &)), &imageViewer, SLOT(updateImage(const QString &, const QByteArray &)));
-
+    QObject::connect(&imageViewer, SIGNAL(windowClose()), &server, SLOT(quit()));
+    QObject::connect(&imageViewer, SIGNAL(windowClose()), &recoder, SLOT(mainwindowClose()));
+    QObject::connect(&imageViewer, SIGNAL(needRecord(QString)), &recoder, SLOT(record(QString)));
+    QObject::connect(&recoder, SIGNAL(convertFinish()), &imageViewer, SLOT(recordFinish()));
     imageViewer.show();
     server.start();
+    recoder.start();
 
     return app.exec();
 }
